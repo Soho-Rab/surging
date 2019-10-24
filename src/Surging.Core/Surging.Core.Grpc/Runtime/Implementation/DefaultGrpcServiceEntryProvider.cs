@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.Logging;
 using Surging.Core.CPlatform;
-using Surging.Core.CPlatform.Routing.Template;
+using Surging.Core.CPlatform.Ioc;
 using Surging.Core.CPlatform.Runtime.Server;
 using Surging.Core.CPlatform.Runtime.Server.Implementation.ServiceDiscovery.Attributes;
 using System;
@@ -9,23 +9,23 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 
-namespace Surging.Core.Protocol.Udp.Runtime.Implementation
+namespace Surging.Core.Grpc.Runtime.Implementation
 {
-   public class DefaultUdpServiceEntryProvider : IUdpServiceEntryProvider
-    {
+    public class DefaultGrpcServiceEntryProvider: IGrpcServiceEntryProvider
+    { 
         #region Field
 
         private readonly IEnumerable<Type> _types;
-        private readonly ILogger<DefaultUdpServiceEntryProvider> _logger;
+        private readonly ILogger<DefaultGrpcServiceEntryProvider> _logger;
         private readonly CPlatformContainer _serviceProvider;
-        private UdpServiceEntry _udpServiceEntry;
+        private List<GrpcServiceEntry> _grpcServiceEntries;
 
         #endregion Field
 
         #region Constructor
 
-        public DefaultUdpServiceEntryProvider(IServiceEntryProvider serviceEntryProvider,
-            ILogger<DefaultUdpServiceEntryProvider> logger,
+        public DefaultGrpcServiceEntryProvider(IServiceEntryProvider serviceEntryProvider,
+            ILogger<DefaultGrpcServiceEntryProvider> logger,
             CPlatformContainer serviceProvider)
         {
             _types = serviceEntryProvider.GetTypes();
@@ -41,44 +41,38 @@ namespace Surging.Core.Protocol.Udp.Runtime.Implementation
         /// 获取服务条目集合。
         /// </summary>
         /// <returns>服务条目集合。</returns>
-        public UdpServiceEntry GetEntry()
+        public List<GrpcServiceEntry> GetEntries()
         {
             var services = _types.ToArray();
-            if (_udpServiceEntry == null)
+            if (_grpcServiceEntries == null)
             {
-                _udpServiceEntry = new UdpServiceEntry();
+                _grpcServiceEntries = new List<GrpcServiceEntry>(); 
                 foreach (var service in services)
                 {
                     var entry = CreateServiceEntry(service);
                     if (entry != null)
                     {
-                        _udpServiceEntry = entry;
-                        break;
+                        _grpcServiceEntries.Add(entry); 
                     }
                 }
                 if (_logger.IsEnabled(LogLevel.Debug))
                 {
-                    _logger.LogDebug($"发现了以下Udp服务：{_udpServiceEntry.Type.FullName}。");
+                    _logger.LogDebug($"发现了以下grpc服务：{string.Join(",", _grpcServiceEntries.Select(i => i.Type.FullName))}。"); ;
                 }
             }
-            return _udpServiceEntry;
+            return _grpcServiceEntries;
         }
 
-        public UdpServiceEntry CreateServiceEntry(Type service)
+        public GrpcServiceEntry CreateServiceEntry(Type service)
         {
-            UdpServiceEntry result = null;
-            var routeTemplate = service.GetCustomAttribute<ServiceBundleAttribute>();
+            GrpcServiceEntry result = null; 
             var objInstance = _serviceProvider.GetInstances(service);
-            var behavior = objInstance as UdpBehavior;
-            var path = RoutePatternParser.Parse(routeTemplate.RouteTemplate, service.Name);
-            if (path.Length > 0 && path[0] != '/')
-                path = $"/{path}";
+            var behavior = objInstance as IServiceBehavior;  
             if (behavior != null)
-                result = new UdpServiceEntry
+                result = new GrpcServiceEntry
                 {
                     Behavior = behavior,
-                    Type = behavior.GetType(),
-                    Path = path,
+                    Type = behavior.GetType()
                 };
             return result;
         }
